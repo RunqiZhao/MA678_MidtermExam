@@ -46,13 +46,18 @@ In this exam, you will act as both the client and the consultant for the data th
 Please explain what your data is about and what the comparison of interest is.  In the process, please make sure to demonstrate that you can load your data properly into R.
 
 *My data includes 20 records of email-checking information of my friends.*
+
 *Number: how many email address they have*
+
 *High: for the most used email address, how often do they check it(by days)*
+
 *Low: for the least used email address, how often do they check it(by days)*
+
 *Student: S: student N: not a student(worked)*
+
 *Gender: F: female M: male*
 
-*From this data, I want to know how long should I expect to get their response if I send them email, and is there a significant difference between students and non-students?*
+*From this data, I want to know how long should I expect to get their response if I send them email, and is there a difference between students and non-students?*
 
 ```{r }
 # Load data
@@ -89,18 +94,25 @@ Please create one (maybe two) figure(s) that highlights the contrast of interest
 ggplot(email) + 
   geom_boxplot(aes(x = Student,y = High, color = Gender)) +
   labs(title = "Figure 1: Boxplot")
+```
 
+```{r}
 # Figures to show the distribution
-# hist(email$High, breaks = 20)
+# hist(email$High, breaks = 50)
 # hist(email$Count, breaks = 50)
+```
+*Hist figure shows most of the High is near to zero, and this variable much larger than Number, so I will try(log) during next steps.*
 
+```{r}
 # Figure 2: Number vs High
 ggplot(email) + 
   geom_point(aes(x = Number ,y = High, color = Student))+
   geom_smooth(aes(x = Number ,y = High), method = "lm")+
   facet_grid(.~Student) +
   labs(title = "Figure 2: Number vs High")
+```
 
+```{r}
 # Figure to show the gender difference
 # ggplot(email) + 
 #   geom_point(aes(x = Number ,y = High, color = Gender))+
@@ -114,7 +126,10 @@ Please perform power analysis on the project.  Use 80% power, the sample size yo
 
 ```{r }
 pwr.t.test(n = 10, d = NULL, sig.level = 0.05, power = 0.8, type= "two.sample")
+```
+*From the power analysis with my sample size and 80% power, 0.05 significant level, I can expect a effect size of 1.32.*
 
+```{r}
 # Calculate the d of my data
 student <- filter(email,Student == "S")
 work <- filter(email,Student =="N")
@@ -122,74 +137,201 @@ d <- abs(mean(student$High) - mean(work$High)) /sd(email$High)
 pwr.t.test(n = 10, d = d, sig.level = NULL, power = 0.8, type= "two.sample")
 pwr.t.test(n = NULL, d = d, sig.level = 0.05, power = 0.8, type= "two.sample")
 ```
-*From the power analysis with my sample size and 80% power, 0.05 significant level, I can expect a effect size of 1.32. If I want to get the effect size of what my sample shows, the sample size is not enough, I only have 60% possibility to get the correct answer. If I want to get a 95% reliable answer, I need at least 29 samples in each group(Students and workers).*
+*If I want to get the effect size of what my sample shows, the sample size is not enough, I only have 60% possibility to get the correct answer. If I want to get a 95% reliable answer, I need at least 29 samples in each group(Students and workers).*
 
 ### Modeling (10pts)
 
 Please pick a regression model that best fits your data and fit your model.  Please make sure you describe why you decide to choose the model. Also, if you are using GLM, make sure you explain your choice of link function as well.
-```{r }
-# Fit linear regression
+
+*In this part, I tried several models, I find the linear regression with log(High) fits better to my data.* 
+*First I fit linear regression, with log: *
+```{r}
+# 1. Fit linear regression
+## log(High)
+fit_1 <- stan_glm(log(High) ~ Number_c + Student + Gender, data = email, refresh = 0)
+print(fit_1)
+# fit_1 <- glm(log(High) ~ Number_c + Student + Gender, data = email)
+# summary(fit_1)
+```
+
+*Plots show the fit situation of my model.*
+```{r}
+post.high <-  posterior_predict(fit_1)
+ppc_dens_overlay(y=log(email$High),yrep=post.high[1:100,])
+
+predicted_1 <- exp(predict(fit_1))
+resid_1 <- email$High - predicted_1
+par(mar=c(3,3,2,1), mgp=c(2,.7,0), tck=-.01)
+plot(x=predicted_1, y=resid_1, type = "p",
+     xlab = "predicted value", ylab = "residuals",
+     main = "Residuals vs. predicted values")
+abline(h=0)
+plot(fit_1)
+residualPlot(fit_1)
+# predict_1 <- posterior_predict(fit_1,newdata= ,draws=100)
+```
+*Then I try model without log*
+```{r}
+## Without log
 fit_1 <- stan_glm(High ~ Number_c + Student + Gender, data = email, refresh = 0)
-# print(fit_1)
-# post.high = posterior_predict(fit_1)
-# ppc_dens_overlay(y=email$High,yrep=post.high[1:100,])
+print(fit_1)
+# fit_1 <- glm(High ~ Number_c + Student + Gender, data = email)
+# summary(fit_1)
+```
 
-# Fit multilevel regression
-# fit_2 <- lmer(High ~ Number_c + (1|Student) + Gender, data = email)
-# summary(fit_2)
+*Plots show that model predicted and residuals are not as goog as the first one.*
+```{r}
+post.high <-  posterior_predict(fit_1)
+ppc_dens_overlay(y=email$High,yrep=post.high[1:100,])
 
-# Fit glm with poison 
+predicted_1 <- predict(fit_1)
+resid_1 <- email$High - predicted_1
+par(mar=c(3,3,2,1), mgp=c(2,.7,0), tck=-.01)
+plot(x=predicted_1, y=resid_1, type = "p",
+     xlab = "predicted value", ylab = "residuals",
+     main = "Residuals vs. predicted values")
+abline(h=0)
+plot(fit_1)
+residualPlot(fit_1)
+# predict_1 <- posterior_predict(fit_1,newdata= ,draws=100)
+```
+*The second I tried to add interaction*
+```{r}
+# 2. Add interaction to linear regression
+fit_2 <- stan_glm(log(High) ~ Number_c + Student + Gender + Number_c:Student, data = email, refresh = 0)
+print(fit_2)
+# fit_2 <- stan_glm(High ~ Number_c + Student + Gender + Number_c:Student, data = email, refresh = 0)
+# print(fit_2)
+```
+*This model doesn't improved a lot, so it will be a waste to add new interactions*
+```{r}
+post.high <-  posterior_predict(fit_2)
+ppc_dens_overlay(y=log(email$High),yrep=post.high[1:100,])
+
+predicted_2 <- exp(predict(fit_2))
+resid_2 <- email$High - predicted_2
+par(mar=c(3,3,2,1), mgp=c(2,.7,0), tck=-.01)
+plot(x=predicted_2, y=resid_2, type = "p",
+     xlab = "predicted value", ylab = "residuals",
+     main = "Residuals vs. predicted values")
+abline(h=0)
+plot(fit_2)
+residualPlot(fit_2)
+```
+
+*The next model tried to take count as outcome: *
+```{r}
+# 3. Fit glm with poison(Count)
 # fit_3 <- stan_glm(Count ~ Number_c + Student + Gender, data = email, refresh = 0, family = poisson(link = "log"))
 # post.count = posterior_predict(fit_3)
 # ppc_dens_overlay(y=email$Count,yrep=post.count[1:100,])
 # plot(fitted(fit_3),resid(fit_3),pch=20)
-
-# Add interaction
-# fit_3 <- stan_glm(High ~ Number_c + Student + Gender + Number_c:Student, data = email, refresh = 0)
-
 ```
+
+*After fitting these models, I decide to take the linear regression, take log(High) as outcome.*
+
 
 ### Validation (10pts)
 
 Please perform a necessary validation and argue why your choice of the model is appropriate.  
 
 ```{r }
-post.high = posterior_predict(fit_1)
-ppc_dens_overlay(y=email$High,yrep=post.high[1:100,])
+# Divide the data into two subset
+train <- email[1:3,]
+newdt <- email[4:5,]
+for (i in 2:4){
+  train <- rbind(train,email[(i*5-4):(i*5-2),])
+  newdt <- rbind(newdt,email[(i*5-1):(i*5),])
+}
+```
+*I divide the data into two subset by this selection because my data is arranged by group, not in random. If I simple divide it by lines, the model will lose information.*
 
-pp_check(fit_1)
+```{r}
+# Train1 to show without log#
+fit_train1 <- glm(High ~ Number_c + Student + Gender, data = train)
+summary(fit_train1)
 
-predicted_1 <- predict(fit_1)
-resid_1 <- email$High - predicted_1
-par(mar=c(3,3,2,1), mgp=c(2,.7,0), tck=-.01)
-plot(x=predicted_1, y=resid_1, type = "p", xlab = "predicted value", ylab = "residuals",
-main = "Residuals vs. predicted values")
-abline(h=0)
-
-# residualPlot(fit_1)
-# predict_1 <- posterior_predict(fit_1,newdata= ,draws=100)
+predicted1 <- predict(fit_train1,newdata = newdt)
+# Calculate mean squared error on the test set
+mse <- mean((newdt$High - predicted1)**2)
+# Residual plot on the test set
+ggplot()+
+  geom_point(aes(x = predicted1, y = predicted1-newdt$High)) +
+  geom_hline(yintercept = 0) +
+  labs(x = "Predicted without log", y = "Prediction error")
 ```
 
+```{r}
+# Train2 to show with log
+fit_train2 <- glm(log(High) ~ Number_c + Student + Gender, data = train)
+summary(fit_train2)
+
+predicted2 <- exp(predict(fit_train2,newdata = newdt))
+# Calculate mean squared error on the test set
+mse <- mean((newdt$High - predicted2)**2)
+# Residual plot on the test set
+ggplot()+
+  geom_point(aes(x = predicted2, y = predicted2-newdt$High)) +
+  geom_hline(yintercept = 0) +
+  labs(x = "Predicted with log", y = "Prediction error")
+```
+*From the prediction error, we can find that log(High) gives better prediction results, without a trend like in the plot without log*
 
 ### Inference (10pts)
 
 Based on the result so far please perform statistical inference to compare the comparison of interest.
 
 ```{r }
-
+fit_1 <- glm(log(High) ~ Number_c + Student + Gender, data = email)
+print(fit_1)
+# plot(fit_1)
+# marginalModelPlot(fit_1)
+coefs = data.frame(summary(fit_1)$coefficients)
+ggplot(coefs) + 
+  geom_point(aes(x = rownames(coefs), y = Estimate)) +
+  geom_errorbar(aes(x = rownames(coefs), ymin = Estimate-Std..Error, ymax = Estimate + Std..Error)) +
+  labs(x = "") +
+  theme_bw()
 ```
+*From this plot, we can find that at 0.68 significant level, the estimate coefficients of students and employees are different from 0, means at this level, there are difference in reply time between these two groups.*
 
+*Then do the t-test for these two groups.* 
+```{r}
+qqPlot(lm(log(High)~Student, data = email), simulate = TRUE, main = 'QQ Plot', labels = FALSE)
+# t_test for students and employees group
+t_test <- t.test(log(High)~Student, email, paired = FALSE, alternative = 'two.sided')
+t_test
+```
 
 ### Discussion (10pts)
 
 Please clearly state your conclusion and the implication of the result.
-*From my regression*
-*I don’t think that there’s much that I personally would be confident in saying.*
+*My raised question is, I want to know how long should I expect to get their response if I send them email, and look at whether there is a difference between students and non-students.*
+
+*From my regression results, I can infer that, if I send an email to my female friends who is now working, with average number of Email addresses, I can expect a reply in 16.44 (exp(2.8)) hours during daytime.*
+
+*I can expect a reply from my male friends who is now working, with average number of Email addresses, in 8.17 hours.*
+
+*The expect reply hours of my student friends can be 9.03 hours for female, and 4.48 hours for male.*
+
+*Also, I can expect the reply hours to be shorter by 1.82 times when my friend get one more email address.*
+
+*I get to know the expected hours to get reply from my student friends can be 1.82 times shorter than worked friends.*
+
 
 ### Limitations and future opportunity. (10pts)
 
 Please list concerns about your analysis.  Also, please state how you might go about fixing the problem in your future study.
-*The first problem is that the sample size is not enough for this analysis.*
+
+*The first problem is that the sample size is not enough for this analysis. There can be a representative question.*
+
+*From my results, I get to know that I will get reply from students in shorter time than my friends who have getting to worked. This is weird because employees are usually expected to check their emails. This need to be fixed or verify in future study.*
+
+*The count variable is another direction for future study. From normal infer, the count distribution follows poisson distribution, but the sample size is two small to tell the true distribution.*
+
+*I did not try multilevel regression model in this analysis, and in future study, I can fit one to compare with the linear regression model I did in this analysis.*
+
+*Also, I take the high check frequency as the reply time, this means I assumed that they will give me their most frequently used email address to contact, and once they see my email, they will reply me. There can be an error from these assumptions.*
 
 ### Comments or questions
 If you have any comments or questions, please write them here.
