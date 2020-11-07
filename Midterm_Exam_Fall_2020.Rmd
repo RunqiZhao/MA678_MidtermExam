@@ -1,0 +1,196 @@
+---
+title: "Midterm Exam"
+author: "Runqi(Ricky) Zhao"
+date: "11/2/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(
+ggplot2,
+knitr,
+arm,
+data.table,
+foreign,
+gridExtra,
+car,
+stringr,
+rstan,
+rstanarm,
+bayesplot,
+zoo,
+plyr,
+reshape2,
+tidyverse,
+dplyr,
+pwr
+)
+```
+
+## Instruction
+
+This is your midterm exam that you are expected to work on it alone.  You may NOT  discuss any of the content of your exam with anyone except your instructor. This includes text, chat, email and other online forums.  We expect you to respect and follow the [GRS Academic and Professional Conduct Code](http://www.bu.edu/cas/files/2017/02/GRS-Academic-Conduct-Code-Final.pdf). 
+
+Although you may NOT ask anyone directly, you are allowed to use external resources such as R codes on the Internet.  If you do use someone's code, please make sure you clearly cite the origin of the code.
+
+When you finish, please compile and submit the PDF file and the link to the GitHub repository that contains the entire analysis.
+
+
+## Introduction
+
+In this exam, you will act as both the client and the consultant for the data that you collected in the data collection exercise (20pts).  Please note that you are not allowed to change the data.  The goal of this exam is to demonstrate your ability to perform the statistical analysis that you learned in this class so far.  It is important to note that significance of the analysis is not the main goal of this exam but the focus is on the appropriateness of your approaches.
+
+### Data Description (10pts)
+
+Please explain what your data is about and what the comparison of interest is.  In the process, please make sure to demonstrate that you can load your data properly into R.
+
+*My data includes 20 records of email-checking information of my friends.*
+*Number: how many email address they have*
+*High: for the most used email address, how often do they check it(by days)*
+*Low: for the least used email address, how often do they check it(by days)*
+*Student: S: student N: not a student(worked)*
+*Gender: F: female M: male*
+
+*From this data, I want to know how long should I expect to get their response if I send them email, and is there a significant difference between students and non-students?*
+
+```{r }
+# Load data
+email <- read.csv("email_dt.csv")
+# Rename columns
+colnames(email) <- c("Number","High","Low","Student","Gender")
+
+# Correct the variables' class
+email$Number <- as.integer(email$Number)
+email$High <- as.numeric(email$High)
+email$Low <- as.numeric(email$Low)
+email$Student <- as.factor(email$Student)
+email$Gender <- as.factor(email$Gender)
+
+# Centering number of emails
+email$Number_c <- email$Number - mean(email$Number)
+
+# High was calculated as: checking times/day, make it into hours of daytime to wait by times 12.
+email$High <- as.numeric(email$High)*12
+
+# Transfer high back to count for the try of poison
+email$Count <- round(1/email$High)
+
+# Display the data
+email
+```
+
+### EDA (10pts)
+
+Please create one (maybe two) figure(s) that highlights the contrast of interest.  Make sure you think ahead and match your figure with the analysis.  For example, if your model requires you to take a log, make sure you take log in the figure as well.
+
+```{r }
+# Figure 1: boxplot
+ggplot(email) + 
+  geom_boxplot(aes(x = Student,y = High, color = Gender)) +
+  labs(title = "Figure 1: Boxplot")
+
+# Figures to show the distribution
+# hist(email$High, breaks = 20)
+# hist(email$Count, breaks = 50)
+
+# Figure 2: Number vs High
+ggplot(email) + 
+  geom_point(aes(x = Number ,y = High, color = Student))+
+  geom_smooth(aes(x = Number ,y = High), method = "lm")+
+  facet_grid(.~Student) +
+  labs(title = "Figure 2: Number vs High")
+
+# Figure to show the gender difference
+# ggplot(email) + 
+#   geom_point(aes(x = Number ,y = High, color = Gender))+
+#   geom_smooth(aes(x = Number ,y = High), method = "lm")+
+#   facet_grid(.~Gender)
+```
+
+### Power Analysis (10pts)
+
+Please perform power analysis on the project.  Use 80% power, the sample size you used and infer the level of effect size you will be able to detect.  Discuss whether your sample size was enough for the problem at hand.  Please note that method of power analysis should match the analysis.  Also, please clearly state why you should NOT use the effect size from the fitted model.
+
+```{r }
+pwr.t.test(n = 10, d = NULL, sig.level = 0.05, power = 0.8, type= "two.sample")
+
+# Calculate the d of my data
+student <- filter(email,Student == "S")
+work <- filter(email,Student =="N")
+d <- abs(mean(student$High) - mean(work$High)) /sd(email$High)
+pwr.t.test(n = 10, d = d, sig.level = NULL, power = 0.8, type= "two.sample")
+pwr.t.test(n = NULL, d = d, sig.level = 0.05, power = 0.8, type= "two.sample")
+```
+*From the power analysis with my sample size and 80% power, 0.05 significant level, I can expect a effect size of 1.32. If I want to get the effect size of what my sample shows, the sample size is not enough, I only have 60% possibility to get the correct answer. If I want to get a 95% reliable answer, I need at least 29 samples in each group(Students and workers).*
+
+### Modeling (10pts)
+
+Please pick a regression model that best fits your data and fit your model.  Please make sure you describe why you decide to choose the model. Also, if you are using GLM, make sure you explain your choice of link function as well.
+```{r }
+# Fit linear regression
+fit_1 <- stan_glm(High ~ Number_c + Student + Gender, data = email, refresh = 0)
+# print(fit_1)
+# post.high = posterior_predict(fit_1)
+# ppc_dens_overlay(y=email$High,yrep=post.high[1:100,])
+
+# Fit multilevel regression
+# fit_2 <- lmer(High ~ Number_c + (1|Student) + Gender, data = email)
+# summary(fit_2)
+
+# Fit glm with poison 
+# fit_3 <- stan_glm(Count ~ Number_c + Student + Gender, data = email, refresh = 0, family = poisson(link = "log"))
+# post.count = posterior_predict(fit_3)
+# ppc_dens_overlay(y=email$Count,yrep=post.count[1:100,])
+# plot(fitted(fit_3),resid(fit_3),pch=20)
+
+# Add interaction
+# fit_3 <- stan_glm(High ~ Number_c + Student + Gender + Number_c:Student, data = email, refresh = 0)
+
+```
+
+### Validation (10pts)
+
+Please perform a necessary validation and argue why your choice of the model is appropriate.  
+
+```{r }
+post.high = posterior_predict(fit_1)
+ppc_dens_overlay(y=email$High,yrep=post.high[1:100,])
+
+pp_check(fit_1)
+
+predicted_1 <- predict(fit_1)
+resid_1 <- email$High - predicted_1
+par(mar=c(3,3,2,1), mgp=c(2,.7,0), tck=-.01)
+plot(x=predicted_1, y=resid_1, type = "p", xlab = "predicted value", ylab = "residuals",
+main = "Residuals vs. predicted values")
+abline(h=0)
+
+# residualPlot(fit_1)
+# predict_1 <- posterior_predict(fit_1,newdata= ,draws=100)
+```
+
+
+### Inference (10pts)
+
+Based on the result so far please perform statistical inference to compare the comparison of interest.
+
+```{r }
+
+```
+
+
+### Discussion (10pts)
+
+Please clearly state your conclusion and the implication of the result.
+*From my regression*
+*I don’t think that there’s much that I personally would be confident in saying.*
+
+### Limitations and future opportunity. (10pts)
+
+Please list concerns about your analysis.  Also, please state how you might go about fixing the problem in your future study.
+*The first problem is that the sample size is not enough for this analysis.*
+
+### Comments or questions
+If you have any comments or questions, please write them here.
+
