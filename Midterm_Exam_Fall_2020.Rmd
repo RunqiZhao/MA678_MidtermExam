@@ -1,7 +1,7 @@
 ---
 title: "Midterm Exam"
 author: "Runqi(Ricky) Zhao"
-date: "11/2/2020"
+date: "11/7/2020"
 output: pdf_document
 ---
 
@@ -284,9 +284,8 @@ Based on the result so far please perform statistical inference to compare the c
 ```{r }
 fit_1 <- glm(log(High) ~ Number_c + Student + Gender, data = email)
 print(fit_1)
-# plot(fit_1)
-# marginalModelPlot(fit_1)
-coefs = data.frame(summary(fit_1)$coefficients)
+
+coefs <- data.frame(summary(fit_1)$coefficients)
 ggplot(coefs) + 
   geom_point(aes(x = rownames(coefs), y = Estimate)) +
   geom_errorbar(aes(x = rownames(coefs), ymin = Estimate-Std..Error, ymax = Estimate + Std..Error)) +
