@@ -75,11 +75,11 @@ email$Gender <- as.factor(email$Gender)
 # Centering number of emails
 email$Number_c <- email$Number - mean(email$Number)
 
-# High was calculated as: checking times/day, make it into hours of daytime to wait by times 12.
-email$High <- as.numeric(email$High)*12
-
 # Transfer high back to count for the try of poison
 email$Count <- round(1/email$High)
+
+# High was calculated as: checking times/day, make it into hours of daytime to wait by times 12.
+email$High <- as.numeric(email$High)*12
 
 # Display the data
 email
